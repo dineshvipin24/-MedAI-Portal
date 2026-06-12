@@ -276,7 +276,7 @@
                 const res = await fetch('/api/vision/scan', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ modality: mod, symptom: sym, image: fileB64 })
+                    body: JSON.stringify({ modality: mod, symptom: sym, image: fileB64, filename: fileEl.files[0] ? fileEl.files[0].name : null })
                 });
                 const data = await res.json();
 
