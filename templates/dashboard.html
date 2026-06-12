@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MedAI Clinical Portal - Dashboard</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <!-- NAVBAR -->
+    <nav class="navbar">
+        <div class="navbar-inner">
+            <div class="navbar-brand">🏥 MedAI Portal</div>
+            <div class="navbar-user">
+                <div class="navbar-user-info">
+                    <div class="name">{{ user.name }}</div>
+                    <div class="meta">Age: {{ user.age }} | {{ user.gender }} | {{ user.pre_existing }}</div>
+                </div>
+                <a href="/logout" class="btn-logout">🚪 Log Out</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <!-- MODULE TABS -->
+        <div class="module-tabs">
+            <button class="module-tab active" data-module="heart" onclick="switchModule('heart')">❤️ CardioShield</button>
+            <button class="module-tab" data-module="diabetes" onclick="switchModule('diabetes')">🩸 DiaPredict</button>
+            <button class="module-tab" data-module="vision" onclick="switchModule('vision')">🩻 VisionScan</button>
+            <button class="module-tab" data-module="history" onclick="switchModule('history'); loadHistory();">📜 History</button>
+        </div>
+
+        <!-- ======= HEART MODULE ======= -->
+        <div id="panel-heart" class="module-panel">
+            <div class="hero-section hero-heart">
+                <h2>❤️ CardioShield Heart Risk Assessment</h2>
+                <p>Evaluate cardiovascular disease risk and generate customized clinical precautions.</p>
+            </div>
+
+            <form onsubmit="analyzeHeart(event)">
+                <div class="grid-3">
+                    <div class="card">
+                        <div class="card-header">Demographics & History</div>
+                        <div class="form-group">
+                            <label class="form-label" for="h-age">Patient Age</label>
+                            <input type="number" id="h-age" class="form-input" value="{{ user.age }}" min="1" max="110">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="h-sex">Sex at Birth</label>
+                            <select id="h-sex" class="form-select">
+                                <option value="M" {{ 'selected' if user.gender == 'Male' else '' }}>Male (M)</option>
+                                <option value="F" {{ 'selected' if user.gender == 'Female' else '' }}>Female (F)</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="h-fbs">Fasting Blood Sugar > 120 mg/dl</label>
+                            <select id="h-fbs" class="form-select">
+                                <option value="0">No</option>
+                                <option value="1">Yes</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="h-angina">Exercise Induced Angina</label>
+                            <select id="h-angina" class="form-select">
+                                <option value="N">No</option>
+                                <option value="Y">Yes</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">Vitals & Measurements</div>
+                        <div class="form-group">
+                            <label class="form-label" for="h-bp">Resting Blood Pressure (mm Hg)</label>
+                            <input type="number" id="h-bp" class="form-input" value="130" min="50" max="250">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="h-chol">Serum Cholesterol (mg/dl)</label>
+                            <input type="number" id="h-chol" class="form-input" value="240" min="80" max="600">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="h-hr">Max Heart Rate Achieved</label>
+                            <input type="number" id="h-hr" class="form-input" value="145" min="60" max="220">
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">Electrocardiogram (ECG)</div>
+                        <div class="form-group">
+                            <label class="form-label" for="h-chest">Chest Pain Type</label>
+                            <select id="h-chest" class="form-select">
+                                <option value="ASY">Asymptomatic (ASY)</option>
+                                <option value="ATA">Atypical Angina (ATA)</option>
+                                <option value="NAP">Non-Anginal Pain (NAP)</option>
+                                <option value="TA">Typical Angina (TA)</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="h-ecg">Resting ECG Results</label>
+                            <select id="h-ecg" class="form-select">
+                                <option value="Normal">Normal</option>
+                                <option value="ST">ST</option>
+                                <option value="LVH">LVH</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="h-oldpeak">ST Depression (Oldpeak)</label>
+                            <input type="number" id="h-oldpeak" class="form-input" value="1.2" min="0" max="10" step="0.1">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="h-slope">ST Slope Type</label>
+                            <select id="h-slope" class="form-select">
+                                <option value="Up">Up</option>
+                                <option value="Flat">Flat</option>
+                                <option value="Down">Down</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary" style="max-width: 320px;">Analyze Heart Health</button>
+            </form>
+
+            <div id="heart-result"></div>
+        </div>
+
+        <!-- ======= DIABETES MODULE ======= -->
+        <div id="panel-diabetes" class="module-panel hidden">
+            <div class="hero-section hero-diabetes">
+                <h2>🩸 DiaPredict Diabetes Assessment</h2>
+                <p>Evaluate diabetic risk levels and generate a personalized clinical nutrition guide.</p>
+            </div>
+
+            <form onsubmit="analyzeDiabetes(event)">
+                <div class="grid-2">
+                    <div class="card">
+                        <div class="card-header">Demographics & Vital Signs</div>
+                        <div class="form-group">
+                            <label class="form-label" for="d-age">Patient Age</label>
+                            <input type="number" id="d-age" class="form-input" value="{{ user.age }}" min="21" max="90">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="d-sex">Sex at Birth</label>
+                            <select id="d-sex" class="form-select" onchange="togglePregnancy()">
+                                <option value="Male" {{ 'selected' if user.gender == 'Male' else '' }}>Male</option>
+                                <option value="Female" {{ 'selected' if user.gender == 'Female' else '' }}>Female</option>
+                            </select>
+                        </div>
+                        <div class="form-group {{ 'hidden' if user.gender == 'Male' else '' }}" id="preg-group">
+                            <label class="form-label" for="d-preg">Number of Pregnancies</label>
+                            <input type="number" id="d-preg" class="form-input" value="0" min="0" max="17">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="d-bmi">Body Mass Index (BMI)</label>
+                            <input type="number" id="d-bmi" class="form-input" value="28.5" min="10" max="65" step="0.1">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="d-bp">Diastolic Blood Pressure (mm Hg)</label>
+                            <input type="number" id="d-bp" class="form-input" value="70" min="30" max="150">
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">Laboratory Test Results</div>
+                        <div class="form-group">
+                            <label class="form-label" for="d-glucose">Plasma Glucose Level (mg/dl)</label>
+                            <input type="number" id="d-glucose" class="form-input" value="110" min="40" max="250">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="d-insulin">2-Hour Serum Insulin (mu U/ml)</label>
+                            <input type="number" id="d-insulin" class="form-input" value="80" min="0" max="900">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="d-skin">Triceps Skin Fold Thickness (mm)</label>
+                            <input type="number" id="d-skin" class="form-input" value="20" min="0" max="99">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="d-dpf">Diabetes Pedigree Function</label>
+                            <input type="number" id="d-dpf" class="form-input" value="0.375" min="0.08" max="2.5" step="0.001">
+                        </div>
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary" style="max-width: 320px;">Analyze Diabetes Health</button>
+            </form>
+
+            <div id="diabetes-result"></div>
+        </div>
+
+        <!-- ======= VISION SCAN MODULE ======= -->
+        <div id="panel-vision" class="module-panel hidden">
+            <div class="hero-section hero-vision">
+                <h2>🩻 VisionScan Medical Imaging Analyzer</h2>
+                <p>Analyze Chest Radiographs or Brain MRI scans to spot localized clinical anomalies.</p>
+            </div>
+
+            <div class="card">
+                <div class="card-header">Radiology Configuration</div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label" for="v-modality">Select Imaging Modality</label>
+                        <select id="v-modality" class="form-select" onchange="updateSymptoms()">
+                            <option value="chest">🫁 Chest Radiograph (X-Ray)</option>
+                            <option value="brain">🧠 Brain MRI / CT Scan</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="v-symptom">Select Clinical Indication</label>
+                        <select id="v-symptom" class="form-select">
+                            <option value="pneumonia">Cough & Fever (Pneumonia Suspect)</option>
+                            <option value="cardiomegaly">Chest Pain (Cardiomegaly Suspect)</option>
+                            <option value="healthy_chest">Routine Screening (Healthy)</option>
+                        </select>
+                    </div>
+                </div>
+                <button class="btn btn-primary mt-2" style="max-width: 320px;" onclick="loadSampleScan()">Load Sample Scan & Analyze</button>
+            </div>
+
+            <div id="vision-result"></div>
+        </div>
+
+        <!-- ======= HISTORY MODULE ======= -->
+        <div id="panel-history" class="module-panel hidden">
+            <div class="hero-section hero-history">
+                <h2>📜 Historical Diagnostic Records</h2>
+                <p>Access your complete diagnostic timeline with risk scores and clinical guidelines.</p>
+            </div>
+
+            <div id="history-content">
+                <div class="alert alert-info">ℹ️ Click the History tab to load your records.</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+    <script>
+        // Vision scan symptom dropdown logic
+        function updateSymptoms() {
+            const mod = document.getElementById('v-modality').value;
+            const symEl = document.getElementById('v-symptom');
+            if (mod === 'chest') {
+                symEl.innerHTML = `
+                    <option value="pneumonia">Cough & Fever (Pneumonia Suspect)</option>
+                    <option value="cardiomegaly">Chest Pain (Cardiomegaly Suspect)</option>
+                    <option value="healthy_chest">Routine Screening (Healthy)</option>
+                `;
+            } else {
+                symEl.innerHTML = `
+                    <option value="tumor">Headache (Brain Tumor Suspect)</option>
+                    <option value="stroke">Weakness (Ischemic Stroke Suspect)</option>
+                    <option value="healthy_brain">Routine Exam (Healthy Brain)</option>
+                `;
+            }
+        }
+
+        async function loadSampleScan() {
+            const mod = document.getElementById('v-modality').value;
+            const sym = document.getElementById('v-symptom').value;
+            const el = document.getElementById('vision-result');
+            el.innerHTML = '<div class="alert alert-info"><span class="spinner"></span> Generating scan & processing AI heatmap...</div>';
+
+            try {
+                const res = await fetch('/api/vision/scan', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ modality: mod, symptom: sym })
+                });
+                const data = await res.json();
+
+                el.innerHTML = `
+                    <div class="grid-2 mt-3">
+                        <div class="card">
+                            <div class="card-header">Original Clinical Scan</div>
+                            <img src="data:image/png;base64,${data.original}" class="scan-image" alt="Original Scan">
+                        </div>
+                        <div class="card">
+                            <div class="card-header">AI Attention Heatmap (Grad-CAM)</div>
+                            <img src="data:image/png;base64,${data.heatmap}" class="scan-image" alt="Heatmap">
+                        </div>
+                    </div>
+                    <div class="grid-2 mt-2">
+                        <div class="result-card ${data.is_abnormal ? 'result-high' : 'result-low'}">
+                            <h3>${data.diagnosis_title}</h3>
+                            <p><strong>Indication:</strong> ${data.diagnosis_detail}</p>
+                            <p class="mt-1">${data.explanation}</p>
+                        </div>
+                        <div class="guide-card" style="margin-top: 0;">
+                            <h4 style="color: #60a5fa;">📋 Clinical Recommendations</h4>
+                            <ul>${data.recommendations.map(r => `<li>${r}</li>`).join('')}</ul>
+                        </div>
+                    </div>
+                `;
+            } catch (err) {
+                el.innerHTML = '<div class="alert alert-error">⚠️ Scan processing failed.</div>';
+            }
+        }
+    </script>
+</body>
+</html>

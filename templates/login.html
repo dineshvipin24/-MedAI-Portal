@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MedAI Clinical Portal - Sign In</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="auth-page">
+        <div class="auth-card">
+            <div class="auth-logo">
+                <h1>🏥 MedAI Clinical Portal</h1>
+                <p>Real-world multi-diagnostic suite & patient database</p>
+            </div>
+
+            <!-- Auth Tabs -->
+            <div class="auth-tabs">
+                <button class="auth-tab active" data-tab="signin" onclick="switchAuthTab('signin')">🔑 Sign In</button>
+                <button class="auth-tab" data-tab="signup" onclick="switchAuthTab('signup')">📝 Register</button>
+            </div>
+
+            <!-- SIGN IN FORM -->
+            <form id="form-signin" class="auth-form" onsubmit="handleLogin(event)">
+                <div id="login-msg"></div>
+
+                <div class="form-group">
+                    <label class="form-label" for="login-email">Email Address or Phone Number</label>
+                    <input type="text" id="login-email" class="form-input" placeholder="you@example.com or 9876543210">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="login-password">Password</label>
+                    <input type="password" id="login-password" class="form-input" placeholder="Enter your password">
+                </div>
+
+                <button type="submit" class="btn btn-primary mt-2">Sign In to Patient File</button>
+            </form>
+
+            <!-- REGISTER FORM -->
+            <form id="form-signup" class="auth-form hidden" onsubmit="handleRegister(event)">
+                <div id="register-msg"></div>
+
+                <div class="form-group">
+                    <label class="form-label" for="reg-name">Legal Name (Full Name)</label>
+                    <input type="text" id="reg-name" class="form-input" placeholder="John Doe">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="reg-email">Email Address or Phone Number</label>
+                    <input type="text" id="reg-email" class="form-input" placeholder="you@example.com or 9876543210">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="reg-password">Password (min 6 characters)</label>
+                    <input type="password" id="reg-password" class="form-input" placeholder="Create a secure password">
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label" for="reg-age">Patient Age</label>
+                        <input type="number" id="reg-age" class="form-input" value="30" min="1" max="110">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="reg-gender">Biological Sex</label>
+                        <select id="reg-gender" class="form-select">
+                            <option value="Male">Male</option>
+                            <option value="Female">Female</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="reg-conditions">Pre-existing Medical Conditions</label>
+                    <textarea id="reg-conditions" class="form-textarea" placeholder="e.g. Hypertension, Asthma, None"></textarea>
+                </div>
+
+                <button type="submit" class="btn btn-primary mt-2">Create Diagnostic File</button>
+            </form>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: medai-clinical-portal
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn server:app --bind 0.0.0.0:$PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.10.0"
+      - key: FLASK_SECRET_KEY
+        generateValue: true
+    disk:
+      name: medai-data
+      mountPath: /opt/render/project/src/data
+      sizeGB: 1
