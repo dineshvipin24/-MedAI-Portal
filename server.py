@@ -283,22 +283,28 @@ def auto_classify_image(img_pil):
     img = img_pil.convert('L').resize((128, 128))
     img_np = np.array(img)
     
+    # 1. Count very dark pixels (scanner bore background, intensity < 15)
+    black_pixels = np.sum(img_np < 15)
+    # 2. Count dark gray pixels (intensity < 45)
     dark_pixels = np.sum(img_np < 45)
-    bright_pixels = np.sum(img_np > 210)
-    total_pixels = img_np.size
+    # 3. Count bright pixels (grid boundaries, skull highlights, text labels, intensity > 200)
+    bright_pixels = np.sum(img_np > 200)
     
-    dark_ratio = dark_pixels / total_pixels
-    bright_ratio = bright_pixels / total_pixels
+    total = img_np.size
+    black_ratio = black_pixels / total
+    dark_ratio = dark_pixels / total
+    bright_ratio = bright_pixels / total
     
-    # 1. Standard Brain MRI: large black background around the circular skull
-    if dark_ratio > 0.45:
+    print(f"CLASSIFIER RATIOS: black={black_ratio:.3f}, dark={dark_ratio:.3f}, bright={bright_ratio:.3f}")
+    
+    # Standard Brain MRI: large black background around the circular skull (black background > 20%)
+    if black_ratio > 0.20:
         return 'brain'
     
-    # 2. Grid-based Brain MRI (white grid margins, dark circles inside):
-    if bright_ratio > 0.30 and dark_ratio > 0.15:
+    # Grid-based Brain MRI (white grid margins > 15% and black circles inside > 10%)
+    if bright_ratio > 0.15 and black_ratio > 0.10:
         return 'brain'
         
-    # 3. Otherwise: Chest X-ray
     return 'chest'
 
 # ===================== VISION SCAN API =====================
