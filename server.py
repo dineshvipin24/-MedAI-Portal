@@ -289,11 +289,26 @@ def vision_scan():
     modality = d.get('modality', 'chest')
     symptom = d.get('symptom', 'healthy_chest')
     
-    # Generate scan
-    if modality == 'chest':
-        scan = generate_synthetic_xray()
+    # Check for uploaded image
+    image_b64 = d.get('image')
+    if image_b64:
+        try:
+            if ',' in image_b64:
+                image_b64 = image_b64.split(',')[1]
+            img_data = base64.b64decode(image_b64)
+            scan = Image.open(io.BytesIO(img_data)).convert('L') # Convert to grayscale
+        except Exception:
+            # Fallback to synthetic scan if decoding fails
+            if modality == 'chest':
+                scan = generate_synthetic_xray()
+            else:
+                scan = generate_synthetic_brain()
     else:
-        scan = generate_synthetic_brain()
+        # Generate synthetic scan
+        if modality == 'chest':
+            scan = generate_synthetic_xray()
+        else:
+            scan = generate_synthetic_brain()
     
     # Grad-CAM coordinates
     configs = {
