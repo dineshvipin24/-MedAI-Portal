@@ -305,7 +305,44 @@ def auto_classify_image(img_pil):
     if bright_ratio > 0.15 and black_ratio > 0.10:
         return 'brain'
         
-    return 'chest'
+def analyze_image_pathology(img_pil, modality):
+    # Convert to grayscale and resize to standard 128x128
+    img = img_pil.convert('L').resize((128, 128))
+    img_np = np.array(img)
+    
+    if modality == 'brain':
+        # Split image into left and right halves to compute structural asymmetry
+        left_half = img_np[:, :64]
+        right_half = img_np[:, 64:]
+        right_half_flipped = np.fliplr(right_half)
+        
+        # Calculate mean absolute difference (asymmetry)
+        asymmetry = np.mean(np.abs(left_half.astype(float) - right_half_flipped.astype(float)))
+        
+        # Check for bright tumor mass regions in center tissue (excluding outer dark border)
+        center_tissue = img_np[24:104, 24:104]
+        bright_pixels = np.sum(center_tissue > 200)
+        bright_ratio = bright_pixels / center_tissue.size
+        
+        print(f"PATHOLOGY BRAIN: asymmetry={asymmetry:.2f}, bright_ratio={bright_ratio:.3f}")
+        
+        # real abnormal scans (like brain.jpeg with tumor or stroke scans)
+        # will show significant asymmetry or bright patches
+        if asymmetry > 7.0 or bright_ratio > 0.03:
+            return 'abnormal'
+        return 'normal'
+    else:
+        # Chest Lungs: check if lung zones have high opacity (infiltration)
+        left_lung = img_np[40:100, 20:50]
+        right_lung = img_np[40:100, 78:108]
+        lung_mean = (np.mean(left_lung) + np.mean(right_lung)) / 2.0
+        
+        print(f"PATHOLOGY CHEST: lung_mean={lung_mean:.2f}")
+        
+        # Pneumonia lungs are white/opaque (> 75). Healthy synthetic is ~22.
+        if lung_mean > 75.0:
+            return 'abnormal'
+        return 'normal'
 
 # ===================== VISION SCAN API =====================
 
@@ -328,11 +365,11 @@ def vision_scan():
             img_data = base64.b64decode(image_b64)
             scan_raw = Image.open(io.BytesIO(img_data))
             
-            # Auto-classify modality of the uploaded file
+            # 1. Auto-classify modality of the uploaded file (Chest vs Brain)
             detected = auto_classify_image(scan_raw)
             scan = scan_raw.convert('L')
             
-            # Override if mismatch detected
+            # Override modality if there is a mismatch
             if detected != modality:
                 modality = detected
                 if modality == 'brain':
@@ -341,14 +378,43 @@ def vision_scan():
                 else:
                     symptom = 'pneumonia'
                     warning_msg = "⚠️ AI Auto-Correction: Chest Radiograph detected (Option selected: Brain). Re-routing scan to Thoracic Diagnostic models."
-        except Exception:
+            
+            # 2. Analyze the actual pathology (abnormal vs normal) inside the image itself
+            pathology = analyze_image_pathology(scan_raw, modality)
+            
+            if modality == 'brain':
+                # If the image itself has a tumor/lesion:
+                if pathology == 'abnormal':
+                    # If user chose healthy screening, override it to tumor
+                    if symptom == 'healthy_brain':
+                        symptom = 'tumor'
+                        warning_msg = "⚠️ AI Diagnosis Override: Abnormal features (Cerebral Mass) detected on the scan. Routine screening indication overridden."
+                else:
+                    # If image is healthy but user chose tumor or stroke, override to healthy
+                    if symptom in ['tumor', 'stroke']:
+                        symptom = 'healthy_brain'
+                        warning_msg = "⚠️ AI Diagnosis Override: Scan is completely clear. High-risk clinical indication (Tumor/Stroke) overridden."
+            else: # chest
+                if pathology == 'abnormal':
+                    # If user chose healthy screening, override to pneumonia
+                    if symptom == 'healthy_chest':
+                        symptom = 'pneumonia'
+                        warning_msg = "⚠️ AI Diagnosis Override: Thoracic abnormalities (Infiltration) detected. Routine screening indication overridden."
+                else:
+                    # If image is healthy but user chose pneumonia/cardiomegaly, override to healthy
+                    if symptom in ['pneumonia', 'cardiomegaly']:
+                        symptom = 'healthy_chest'
+                        warning_msg = "⚠️ AI Diagnosis Override: Clear lung fields. Abnormal clinical indication overridden."
+                        
+        except Exception as e:
+            print(f"Vision analysis error: {e}")
             # Fallback to synthetic scan if decoding fails
             if modality == 'chest':
                 scan = generate_synthetic_xray()
             else:
                 scan = generate_synthetic_brain()
     else:
-        # Generate synthetic scan
+        # Generate synthetic scan matching user preference (for demo mode)
         if modality == 'chest':
             scan = generate_synthetic_xray()
         else:
