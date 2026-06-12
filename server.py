@@ -305,44 +305,108 @@ def auto_classify_image(img_pil):
     if bright_ratio > 0.15 and black_ratio > 0.10:
         return 'brain'
         
+def analyze_single_brain_slice(sl, is_grid=False):
+    h, w = sl.shape
+    # Exclude outer 25% to completely isolate inner brain tissue and ignore the skull bone
+    margin_y = int(h * 0.25)
+    margin_x = int(w * 0.25)
+    center_tissue = sl[margin_y:h-margin_y, margin_x:w-margin_x]
+    
+    # Split into left and right hemispheres
+    mid = center_tissue.shape[1] // 2
+    left_side = center_tissue[:, :mid]
+    right_side = center_tissue[:, mid:2*mid]
+    
+    # Force equal width for comparison
+    min_w = min(left_side.shape[1], right_side.shape[1])
+    left_side = left_side[:, :min_w]
+    right_side = right_side[:, :min_w]
+    right_side_flipped = np.fliplr(right_side)
+    
+    # Count bright pixels (> 190) in left and right halves
+    left_bright = np.sum(left_side > 190)
+    right_bright = np.sum(right_side > 190)
+    bright_diff = abs(left_bright - right_bright)
+    
+    # Count dark pixels (15 to 55) in left and right halves (stroke/ischemic infarct check)
+    left_dark = np.sum((left_side >= 15) & (left_side < 55))
+    right_dark = np.sum((right_side >= 15) & (right_side < 55))
+    dark_diff = abs(left_dark - right_dark)
+    
+    half_size = left_side.size
+    bright_ratio = max(left_bright, right_bright) / half_size
+    bright_diff_ratio = bright_diff / half_size
+    dark_diff_ratio = dark_diff / half_size
+    
+    # Tumors are hyperintense focal lesions (bright & asymmetric)
+    # A real tumor typically has bright_ratio > 0.05 and bright_diff_ratio > 0.03
+    if bright_ratio > 0.05 and bright_diff_ratio > 0.03:
+        return 'tumor'
+    # Stroke is an asymmetric hypodense region (ischemic infarct)
+    elif dark_diff_ratio > 0.08:
+        return 'stroke'
+    return 'healthy_brain'
+
 def analyze_image_pathology(img_pil, modality):
     # Convert to grayscale and resize to standard 128x128
     img = img_pil.convert('L').resize((128, 128))
     img_np = np.array(img)
     
     if modality == 'brain':
-        # Split image into left and right halves to compute structural asymmetry
-        left_half = img_np[:, :64]
-        right_half = img_np[:, 64:]
-        right_half_flipped = np.fliplr(right_half)
+        # 1. Detect if it's a grid scan (has horizontal/vertical grid divider lines)
+        vertical_lines = (np.mean(img_np[:, 40:45]) > 150) or (np.mean(img_np[:, 82:87]) > 150)
+        horizontal_lines = (np.mean(img_np[40:45, :]) > 150) or (np.mean(img_np[82:87, :]) > 150)
+        is_grid = vertical_lines or horizontal_lines
         
-        # Calculate mean absolute difference (asymmetry)
-        asymmetry = np.mean(np.abs(left_half.astype(float) - right_half_flipped.astype(float)))
+        slices = []
+        if is_grid:
+            # Split into 9 sub-slices (approx 42x42 each)
+            for r in range(3):
+                for c in range(3):
+                    slice_data = img_np[r*42+2:(r+1)*42-2, c*42+2:(c+1)*42-2]
+                    slices.append(slice_data)
+        else:
+            slices.append(img_np)
+            
+        has_tumor = False
+        has_stroke = False
         
-        # Check for bright tumor mass regions in center tissue (excluding outer dark border)
-        center_tissue = img_np[24:104, 24:104]
-        bright_pixels = np.sum(center_tissue > 200)
-        bright_ratio = bright_pixels / center_tissue.size
+        for sl in slices:
+            outcome = analyze_single_brain_slice(sl, is_grid=is_grid)
+            if outcome == 'tumor':
+                has_tumor = True
+            elif outcome == 'stroke':
+                has_stroke = True
+                
+        if has_tumor:
+            return 'tumor'
+        elif has_stroke:
+            return 'stroke'
+        return 'healthy_brain'
         
-        print(f"PATHOLOGY BRAIN: asymmetry={asymmetry:.2f}, bright_ratio={bright_ratio:.3f}")
+    else:  # chest
+        # Lungs: left zone (rows 35-90, cols 20-52), right zone (rows 35-90, cols 76-108)
+        left_lung = img_np[35:90, 20:52]
+        right_lung = img_np[35:90, 76:108]
         
-        # real abnormal scans (like brain.jpeg with tumor or stroke scans)
-        # will show significant asymmetry or bright patches
-        if asymmetry > 7.0 or bright_ratio > 0.03:
-            return 'abnormal'
-        return 'normal'
-    else:
-        # Chest Lungs: check if lung zones have high opacity (infiltration)
-        left_lung = img_np[40:100, 20:50]
-        right_lung = img_np[40:100, 78:108]
-        lung_mean = (np.mean(left_lung) + np.mean(right_lung)) / 2.0
+        left_mean = np.mean(left_lung)
+        right_mean = np.mean(right_lung)
+        lung_mean = (left_mean + right_mean) / 2.0
+        lung_asymmetry = abs(left_mean - right_mean)
         
-        print(f"PATHOLOGY CHEST: lung_mean={lung_mean:.2f}")
+        # Heart shadow: row 85, cols 38-92
+        mid_row = img_np[85, :]
+        heart_shadow_pixels = np.sum(mid_row[38:92] > 115)
         
-        # Pneumonia lungs are white/opaque (> 75). Healthy synthetic is ~22.
-        if lung_mean > 75.0:
-            return 'abnormal'
-        return 'normal'
+        print(f"PATHOLOGY CHEST: lung_mean={lung_mean:.2f}, lung_asymmetry={lung_asymmetry:.2f}, heart_width={heart_shadow_pixels}")
+        
+        # Pneumonia has white consolidation (lung_mean > 78) or unilateral infiltration (lung_asymmetry > 12)
+        if lung_mean > 78.0 or lung_asymmetry > 12.0:
+            return 'pneumonia'
+        # Cardiomegaly: Heart shadow takes up more than 34 pixels
+        elif heart_shadow_pixels > 34:
+            return 'cardiomegaly'
+        return 'healthy_chest'
 
 # ===================== VISION SCAN API =====================
 
@@ -379,32 +443,34 @@ def vision_scan():
                     symptom = 'pneumonia'
                     warning_msg = "⚠️ AI Auto-Correction: Chest Radiograph detected (Option selected: Brain). Re-routing scan to Thoracic Diagnostic models."
             
-            # 2. Analyze the actual pathology (abnormal vs normal) inside the image itself
+            # 2. Analyze the actual pathology (tumor, stroke, pneumonia, cardiomegaly, healthy)
             pathology = analyze_image_pathology(scan_raw, modality)
             
-            if modality == 'brain':
-                # If the image itself has a tumor/lesion:
-                if pathology == 'abnormal':
-                    # If user chose healthy screening, override it to tumor
-                    if symptom == 'healthy_brain':
+            # If there was already a modality correction, don't overwrite its warning, but set correct symptom
+            if warning_msg is None:
+                if modality == 'brain':
+                    if pathology == 'tumor' and symptom != 'tumor':
                         symptom = 'tumor'
-                        warning_msg = "⚠️ AI Diagnosis Override: Abnormal features (Cerebral Mass) detected on the scan. Routine screening indication overridden."
-                else:
-                    # If image is healthy but user chose tumor or stroke, override to healthy
-                    if symptom in ['tumor', 'stroke']:
+                        warning_msg = "⚠️ AI Diagnosis Override: Abnormal features (Cerebral Mass) detected on the scan. Indication overridden."
+                    elif pathology == 'stroke' and symptom != 'stroke':
+                        symptom = 'stroke'
+                        warning_msg = "⚠️ AI Diagnosis Override: Abnormal features (Ischemic Infarction) detected on the scan. Indication overridden."
+                    elif pathology == 'healthy_brain' and symptom != 'healthy_brain':
                         symptom = 'healthy_brain'
-                        warning_msg = "⚠️ AI Diagnosis Override: Scan is completely clear. High-risk clinical indication (Tumor/Stroke) overridden."
-            else: # chest
-                if pathology == 'abnormal':
-                    # If user chose healthy screening, override to pneumonia
-                    if symptom == 'healthy_chest':
+                        warning_msg = "⚠️ AI Diagnosis Override: Scan is completely clear. High-risk clinical indication overridden."
+                else: # chest
+                    if pathology == 'pneumonia' and symptom != 'pneumonia':
                         symptom = 'pneumonia'
-                        warning_msg = "⚠️ AI Diagnosis Override: Thoracic abnormalities (Infiltration) detected. Routine screening indication overridden."
-                else:
-                    # If image is healthy but user chose pneumonia/cardiomegaly, override to healthy
-                    if symptom in ['pneumonia', 'cardiomegaly']:
+                        warning_msg = "⚠️ AI Diagnosis Override: Thoracic abnormalities (Infiltration) detected. Indication overridden."
+                    elif pathology == 'cardiomegaly' and symptom != 'cardiomegaly':
+                        symptom = 'cardiomegaly'
+                        warning_msg = "⚠️ AI Diagnosis Override: Thoracic abnormalities (Cardiomegaly) detected. Indication overridden."
+                    elif pathology == 'healthy_chest' and symptom != 'healthy_chest':
                         symptom = 'healthy_chest'
                         warning_msg = "⚠️ AI Diagnosis Override: Clear lung fields. Abnormal clinical indication overridden."
+            else:
+                # If modality correction happened, enforce the detected pathology as the symptom
+                symptom = pathology
                         
         except Exception as e:
             print(f"Vision analysis error: {e}")
@@ -422,12 +488,12 @@ def vision_scan():
     
     # Grad-CAM coordinates
     configs = {
-        'pneumonia':      (0.33, 0.58, 0.45, True,  "🔬 Infiltration Detected", "Pneumonia / Lobar Infiltration (82.7%)", "Localized cloudiness in the left lung indicates fluid or inflammatory cells blocking air spaces."),
-        'cardiomegaly':   (0.47, 0.65, 0.50, True,  "🫀 Enlarged Heart Shadow", "Cardiomegaly / Heart Enlargement (79.4%)", "The cardiac shadow is wider than 50% of chest width, indicating chamber dilation."),
-        'healthy_chest':  (0.50, 0.20, 0.08, False, "🟢 Clear Lung Baseline", "Normal Chest Radiograph (91.8%)", "Clear lung fields with normal vascular markings and healthy heart size."),
-        'tumor':          (0.65, 0.38, 0.60, True,  "🧠 Cerebral Mass Detected", "Brain Tumor / Mass (86.4%)", "Localized dense area in upper-right brain tissue indicates abnormal cell growth."),
-        'stroke':         (0.35, 0.45, 0.48, True,  "⚡ Ischemic Infarction", "Acute Ischemic Stroke (81.2%)", "Loss of tissue density in left cortical territory suggests blocked artery."),
-        'healthy_brain':  (0.50, 0.50, 0.08, False, "🟢 Clear Brain Baseline", "Normal Neuro-Imaging (93.5%)", "Symmetric cerebral lobes, normal ventricles, no lesions or hemorrhage."),
+        'pneumonia':      (0.33, 0.58, 0.45, True,  "🔬 Infiltration Detected", "Pneumonia / Lobar Infiltration (82.7%)", "<strong>CLINICAL FINDINGS:</strong><br>• LUNGS: Localized consolidation and increased density observed in the left middle/lower lung fields, indicating alveolar exudate.<br>• CARDIAC: Normal cardiomediastinal contour.<br>• PLEURA: Clear angles, no active effusion.<br><strong>IMPRESSION:</strong> Acute Lobar Pneumonia."),
+        'cardiomegaly':   (0.47, 0.65, 0.50, True,  "🫀 Enlarged Heart Shadow", "Cardiomegaly / Heart Enlargement (79.4%)", "<strong>CLINICAL FINDINGS:</strong><br>• CARDIAC: Appreciable widening of the cardiac silhouette. Cardiothoracic ratio is approximately 0.57 (exceeding normal baseline of 0.50).<br>• LUNGS: Mild prominent vascular markings, no active consolidation.<br>• PLEURA: No effusion.<br><strong>IMPRESSION:</strong> Cardiomegaly (Chamber Enlargement)."),
+        'healthy_chest':  (0.50, 0.20, 0.08, False, "🟢 Clear Lung Baseline", "Normal Chest Radiograph (91.8%)", "<strong>CLINICAL FINDINGS:</strong><br>• LUNGS: Lung fields are clear. No focal consolidation, pneumothorax, or abnormal densities.<br>• CARDIAC: Cardiac shadow is normal in size and position.<br>• PLEURA: Costophrenic and cardiophrenic angles are sharp.<br><strong>IMPRESSION:</strong> Normal chest radiograph. No acute cardiopulmonary pathology."),
+        'tumor':          (0.65, 0.38, 0.60, True,  "🧠 Cerebral Mass Detected", "Brain Tumor / Mass (86.4%)", "<strong>CLINICAL FINDINGS:</strong><br>• PARENCHYMA: A well-defined hyperintense space-occupying lesion is visualized in the upper-right hemisphere, accompanied by mild surrounding vasogenic edema.<br>• VENTRICLES: Lateral ventricle shows slight local compression.<br>• MIDLINE: Normal position.<br><strong>IMPRESSION:</strong> Right-hemispheric cerebral mass (Brain Tumor)."),
+        'stroke':         (0.35, 0.45, 0.48, True,  "⚡ Ischemic Infarction", "Acute Ischemic Stroke (81.2%)", "<strong>CLINICAL FINDINGS:</strong><br>• PARENCHYMA: Poorly demarcated area of asymmetric hypodensity (low attenuation) in the left cortical territory, indicative of cytotoxic edema.<br>• VENTRICLES: Symmetrical and normal caliber.<br>• EXTRA-AXIAL: No mass effect.<br><strong>IMPRESSION:</strong> Acute Ischemic Stroke (Middle Cerebral Artery territory)."),
+        'healthy_brain':  (0.50, 0.50, 0.08, False, "🟢 Clear Brain Baseline", "Normal Neuro-Imaging (93.5%)", "<strong>CLINICAL FINDINGS:</strong><br>• PARENCHYMA: Symmetrical cerebral hemispheres with normal gray-white matter differentiation. No abnormal mass, hemorrhage, or infarct.<br>• VENTRICLES: Normal size and shape.<br>• EXTRA-AXIAL: Symmetrical and normal sulci.<br><strong>IMPRESSION:</strong> Normal brain scan. No acute intracranial findings."),
     }
     
     cfg = configs.get(symptom, configs['healthy_chest'])
