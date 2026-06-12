@@ -15,8 +15,11 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 app = Flask(__name__, template_folder=os.path.join(BASE_DIR, 'templates'), static_folder=os.path.join(BASE_DIR, 'static'))
 app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'medai_clinical_secret_key_2026')
 
-# --- Database (uses persistent disk on Render, local file otherwise) ---
-DATA_DIR = os.environ.get('RENDER_DISK_PATH', BASE_DIR)
+# --- Database (uses persistent disk on Render, /tmp on Vercel, local file otherwise) ---
+if os.environ.get('VERCEL') == '1':
+    DATA_DIR = '/tmp'
+else:
+    DATA_DIR = os.environ.get('RENDER_DISK_PATH', BASE_DIR)
 DB_FILE = os.path.join(DATA_DIR, "medai_clinical.db")
 
 def init_db():
