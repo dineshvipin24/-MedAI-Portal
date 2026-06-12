@@ -403,6 +403,14 @@ def api_history():
 
 # ===================== RUN =====================
 if __name__ == '__main__':
+    # Generate test images for manual validation
+    try:
+        generate_synthetic_xray().save(os.path.join(BASE_DIR, 'chest_test.png'))
+        generate_synthetic_brain().save(os.path.join(BASE_DIR, 'brain_test.png'))
+        print("Mock scans chest_test.png and brain_test.png generated successfully.")
+    except Exception as e:
+        print(f"Error generating mock scans: {e}")
+        
     port = int(os.environ.get('PORT', 5000))
     debug = os.environ.get('FLASK_ENV', 'development') == 'development'
     print(f"\n🏥 MedAI Clinical Portal is running!")
