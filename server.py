@@ -278,6 +278,29 @@ def predict_diabetes():
     
     return jsonify({"prediction": pred, "probability": prob})
 
+def auto_classify_image(img_pil):
+    # Convert to grayscale and resize to standard 128x128
+    img = img_pil.convert('L').resize((128, 128))
+    img_np = np.array(img)
+    
+    dark_pixels = np.sum(img_np < 45)
+    bright_pixels = np.sum(img_np > 210)
+    total_pixels = img_np.size
+    
+    dark_ratio = dark_pixels / total_pixels
+    bright_ratio = bright_pixels / total_pixels
+    
+    # 1. Standard Brain MRI: large black background around the circular skull
+    if dark_ratio > 0.45:
+        return 'brain'
+    
+    # 2. Grid-based Brain MRI (white grid margins, dark circles inside):
+    if bright_ratio > 0.30 and dark_ratio > 0.15:
+        return 'brain'
+        
+    # 3. Otherwise: Chest X-ray
+    return 'chest'
+
 # ===================== VISION SCAN API =====================
 
 @app.route('/api/vision/scan', methods=['POST'])
@@ -288,6 +311,7 @@ def vision_scan():
     d = request.json
     modality = d.get('modality', 'chest')
     symptom = d.get('symptom', 'healthy_chest')
+    warning_msg = None
     
     # Check for uploaded image
     image_b64 = d.get('image')
@@ -296,7 +320,21 @@ def vision_scan():
             if ',' in image_b64:
                 image_b64 = image_b64.split(',')[1]
             img_data = base64.b64decode(image_b64)
-            scan = Image.open(io.BytesIO(img_data)).convert('L') # Convert to grayscale
+            scan_raw = Image.open(io.BytesIO(img_data))
+            
+            # Auto-classify modality of the uploaded file
+            detected = auto_classify_image(scan_raw)
+            scan = scan_raw.convert('L')
+            
+            # Override if mismatch detected
+            if detected != modality:
+                modality = detected
+                if modality == 'brain':
+                    symptom = 'tumor'
+                    warning_msg = "⚠️ AI Auto-Correction: Brain MRI detected (Option selected: Chest). Re-routing scan to Neural Diagnostic models."
+                else:
+                    symptom = 'pneumonia'
+                    warning_msg = "⚠️ AI Auto-Correction: Chest Radiograph detected (Option selected: Brain). Re-routing scan to Thoracic Diagnostic models."
         except Exception:
             # Fallback to synthetic scan if decoding fails
             if modality == 'chest':
@@ -343,7 +381,8 @@ def vision_scan():
         "diagnosis_title": title,
         "diagnosis_detail": detail,
         "explanation": explanation,
-        "recommendations": recommendations_map.get(symptom, [])
+        "recommendations": recommendations_map.get(symptom, []),
+        "warning": warning_msg
     })
 
 # ===================== HISTORY API =====================

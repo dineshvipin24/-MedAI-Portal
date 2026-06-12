@@ -280,7 +280,13 @@
                 });
                 const data = await res.json();
 
+                let warningBanner = "";
+                if (data.warning) {
+                    warningBanner = `<div class="alert alert-error" style="margin-bottom: 15px; border-left: 5px solid #ef4444; font-weight: 500;">${data.warning}</div>`;
+                }
+
                 el.innerHTML = `
+                    ${warningBanner}
                     <div class="grid-2 mt-3">
                         <div class="card">
                             <div class="card-header">Original Clinical Scan</div>
